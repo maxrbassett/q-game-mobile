@@ -1,8 +1,8 @@
 /**
- * Root navigation shell. Only one screen exists today (Deck), but the stack
- * is set up now so Phase 2 (sign-in) and Phase 3 (games list / game view /
- * send modal) can add routes without restructuring, and so a push
- * notification deep link has somewhere to navigate to later.
+ * Root navigation shell: the deck, the account modal, and the game screens
+ * (games list -> game view, and send-round). Set up as a real stack (rather
+ * than the web app's floating overlays) so a push notification deep link
+ * has somewhere to navigate to later (Phase 5).
  */
 
 import React from "react";
@@ -10,6 +10,9 @@ import { NavigationContainer, DefaultTheme, DarkTheme } from "@react-navigation/
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import DeckScreen from "../screens/DeckScreen";
 import SignInScreen from "../screens/SignInScreen";
+import GamesListScreen from "../screens/GamesListScreen";
+import GameViewScreen from "../screens/GameViewScreen";
+import SendModalScreen from "../screens/SendModalScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -34,6 +37,15 @@ export default function RootNavigator({ theme, colors }) {
         </Stack.Screen>
         <Stack.Screen name="SignIn" options={{ presentation: "modal" }}>
           {({ navigation }) => <SignInScreen colors={colors} navigation={navigation} />}
+        </Stack.Screen>
+        <Stack.Screen name="GamesList" options={{ presentation: "modal" }}>
+          {({ navigation }) => <GamesListScreen colors={colors} navigation={navigation} />}
+        </Stack.Screen>
+        <Stack.Screen name="GameView">
+          {({ route, navigation }) => <GameViewScreen colors={colors} route={route} navigation={navigation} />}
+        </Stack.Screen>
+        <Stack.Screen name="SendModal" options={{ presentation: "modal" }}>
+          {({ route, navigation }) => <SendModalScreen colors={colors} route={route} navigation={navigation} />}
         </Stack.Screen>
       </Stack.Navigator>
     </NavigationContainer>

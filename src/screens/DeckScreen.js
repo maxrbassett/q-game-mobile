@@ -7,7 +7,7 @@ import QuestionCard from "../components/QuestionCard";
 import { fonts } from "../theme";
 
 export default function DeckScreen({ colors, navigation }) {
-  const { ready, stats, user, profile } = useApp();
+  const { ready, stats, user, profile, yourTurnCount } = useApp();
 
   if (!ready) {
     return (
@@ -30,17 +30,29 @@ export default function DeckScreen({ colors, navigation }) {
             {stats.answered} of {stats.totalQuestions} answered
           </Text>
         </View>
-        <Pressable
-          onPress={() => navigation.navigate("SignIn")}
-          style={[styles.accountPill, { borderColor: colors.border, backgroundColor: colors.surface2 }]}
-        >
-          <Text style={{ color: colors.inkMuted, fontFamily: fonts.bodyMedium, fontSize: 13 }}>
-            {accountLabel}
-          </Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          {!!user && (
+            <Pressable
+              onPress={() => navigation.navigate("GamesList")}
+              style={[styles.accountPill, { borderColor: colors.border, backgroundColor: colors.surface2 }]}
+            >
+              <Text style={{ color: colors.inkMuted, fontFamily: fonts.bodyMedium, fontSize: 13 }}>
+                Games{yourTurnCount > 0 ? ` · ${yourTurnCount}` : ""}
+              </Text>
+            </Pressable>
+          )}
+          <Pressable
+            onPress={() => navigation.navigate("SignIn")}
+            style={[styles.accountPill, { borderColor: colors.border, backgroundColor: colors.surface2 }]}
+          >
+            <Text style={{ color: colors.inkMuted, fontFamily: fonts.bodyMedium, fontSize: 13 }}>
+              {accountLabel}
+            </Text>
+          </Pressable>
+        </View>
       </View>
       <CategoryFilter colors={colors} />
-      <QuestionCard colors={colors} />
+      <QuestionCard colors={colors} navigation={navigation} />
     </SafeAreaView>
   );
 }
@@ -63,11 +75,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 2,
   },
+  headerActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 6,
+  },
   accountPill: {
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 100,
     borderWidth: 1,
-    marginTop: 6,
   },
 });

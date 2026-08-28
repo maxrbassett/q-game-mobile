@@ -32,6 +32,7 @@ import {
 } from "../services/storageService";
 import { supabase, isCloudEnabled } from "../services/supabase";
 import { QUESTIONS, getQuestions } from "../data/questions";
+import { getYourTurnCount, subscribeToRounds } from "../services/gameService";
 
 const AppContext = createContext(null);
 
@@ -51,6 +52,8 @@ export function AppProvider({ children }) {
   const [activeCategory, setActiveCategory] = useState(null);
   const [deck, setDeck] = useState(() => getQuestions({ questions: QUESTIONS }));
   const [currentIndex, setCurrentIndex] = useState(0);
+
+  const [yourTurnCount, setYourTurnCount] = useState(0);
 
   const userId = user?.id ?? null;
 
@@ -117,6 +120,27 @@ export function AppProvider({ children }) {
   useEffect(() => {
     refreshProfile();
   }, [refreshProfile]);
+
+  // ── Your-turn badge: fetch count + subscribe to realtime round changes ─────
+  const refreshGames = useCallback(async () => {
+    if (!userId) {
+      setYourTurnCount(0);
+      return;
+    }
+    setYourTurnCount(await getYourTurnCount(userId));
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) {
+      setYourTurnCount(0);
+      return;
+    }
+    refreshGames();
+    const unsub = subscribeToRounds(userId, () => {
+      refreshGames();
+    });
+    return unsub;
+  }, [userId, refreshGames]);
 
   // ── Rebuild deck whenever the pool or filter changes ────────────────────────
   useEffect(() => {
@@ -229,6 +253,8 @@ export function AppProvider({ children }) {
       signOut,
       claimUsername,
       refreshProfile,
+      yourTurnCount,
+      refreshGames,
       allQuestions,
       activeCategory,
       selectCategory,
@@ -256,6 +282,8 @@ export function AppProvider({ children }) {
       signOut,
       claimUsername,
       refreshProfile,
+      yourTurnCount,
+      refreshGames,
       allQuestions,
       activeCategory,
       selectCategory,

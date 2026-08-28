@@ -24,7 +24,7 @@ import ChoiceButtons from "./ChoiceButtons";
 const SWIPE_THRESHOLD = 100;
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-export default function QuestionCard({ colors }) {
+export default function QuestionCard({ colors, navigation }) {
   const {
     currentQuestion,
     nextQuestion,
@@ -33,6 +33,7 @@ export default function QuestionCard({ colors }) {
     isFavorite,
     getAnswer,
     saveAnswer,
+    user,
   } = useApp();
 
   const position = useRef(new Animated.ValueXY()).current;
@@ -92,6 +93,7 @@ export default function QuestionCard({ colors }) {
 
   const accent = CATEGORY_COLORS[currentQuestion.category] ?? colors.accent;
   const displayText = choices?.displayText ?? currentQuestion.text;
+  const hasAnswer = !!(savedAnswer && (savedAnswer.choice || savedAnswer.text?.trim()));
 
   const handleChoiceSelect = (option) => {
     const nextChoice = savedAnswer?.choice === option ? null : option;
@@ -153,6 +155,30 @@ export default function QuestionCard({ colors }) {
             onEndEditing={handleTextBlur}
             multiline
           />
+        )}
+
+        {!!user && (
+          <View style={styles.footerRow}>
+            {hasAnswer && (
+              <Text style={{ color: colors.inkMuted, fontSize: 12, fontFamily: fonts.bodyMedium }}>
+                ✓ Answered
+              </Text>
+            )}
+            <Pressable
+              disabled={!hasAnswer}
+              onPress={() =>
+                navigation.navigate("SendModal", { question: currentQuestion, answer: savedAnswer })
+              }
+              style={[
+                styles.sendBtn,
+                { borderColor: colors.border, backgroundColor: hasAnswer ? colors.accentDim : colors.surface2 },
+              ]}
+            >
+              <Text style={{ color: hasAnswer ? colors.accent : colors.inkFaint, fontFamily: fonts.bodyMedium, fontSize: 13 }}>
+                Send to a friend
+              </Text>
+            </Pressable>
+          </View>
         )}
       </Animated.View>
 
@@ -222,6 +248,18 @@ const styles = StyleSheet.create({
     minHeight: 90,
     fontSize: 16,
     textAlignVertical: "top",
+  },
+  footerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  sendBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    marginLeft: "auto",
   },
   navRow: {
     flexDirection: "row",
