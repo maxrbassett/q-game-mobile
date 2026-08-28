@@ -9,6 +9,7 @@ import React from "react";
 import { NavigationContainer, DefaultTheme, DarkTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import DeckScreen from "../screens/DeckScreen";
+import SignInScreen from "../screens/SignInScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -29,7 +30,10 @@ export default function RootNavigator({ theme, colors }) {
     <NavigationContainer theme={navTheme}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Deck">
-          {() => <DeckScreen colors={colors} />}
+          {({ navigation }) => <DeckScreen colors={colors} navigation={navigation} />}
+        </Stack.Screen>
+        <Stack.Screen name="SignIn" options={{ presentation: "modal" }}>
+          {({ navigation }) => <SignInScreen colors={colors} navigation={navigation} />}
         </Stack.Screen>
       </Stack.Navigator>
     </NavigationContainer>
