@@ -18,6 +18,15 @@ import { getChoices } from "../data/choices";
 import { roleOf, isYourTurn, guessVerdict, submitBTurn, submitAGuess } from "../services/gameService";
 import ChoiceRadioGroup from "../components/ChoiceRadioGroup";
 import { fonts, radii } from "../theme";
+import { haptics } from "../services/haptics";
+
+// The reveal is the emotional beat of the game — fire a matching haptic
+// the instant the guess turns out right or wrong. null (free-text/skipped,
+// no objective answer) gets no haptic, same as the UI shows no verdict tag.
+function fireVerdictHaptic(verdict) {
+  if (verdict === true) haptics.success();
+  else if (verdict === false) haptics.warning();
+}
 
 export default function GameViewScreen({ route, navigation, colors }) {
   const { round, onSubmitted } = route.params;
@@ -75,6 +84,7 @@ export default function GameViewScreen({ route, navigation, colors }) {
     try {
       await submitAGuess(round.id, { guess: localGuess });
       onSubmitted?.();
+      fireVerdictHaptic(guessVerdict(localGuess, round.bAnswer));
       setStep("reveal");
     } catch (e) {
       setError(e?.message ?? "Couldn't save your guess. Try again.");
@@ -182,7 +192,14 @@ function BTurn({
               <Text style={{ color: colors.inkMuted, fontFamily: fonts.bodyMedium }}>Skip guess</Text>
             </Pressable>
           )}
-          <PrimaryButton disabled={!guessReady} onPress={() => setStep("reveal")} colors={colors}>
+          <PrimaryButton
+            disabled={!guessReady}
+            onPress={() => {
+              fireVerdictHaptic(guessVerdict(localGuess, round.aAnswer));
+              setStep("reveal");
+            }}
+            colors={colors}
+          >
             Reveal {aName}'s answer
           </PrimaryButton>
         </View>

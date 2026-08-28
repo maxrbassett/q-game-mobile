@@ -8,6 +8,7 @@
 import React from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { fonts, radii } from "../theme";
+import { haptics } from "../services/haptics";
 
 export default function ChoiceRadioGroup({ choices, choice, onChange, colors }) {
   return (
@@ -17,7 +18,10 @@ export default function ChoiceRadioGroup({ choices, choice, onChange, colors }) 
         return (
           <Pressable
             key={opt}
-            onPress={() => onChange(active ? null : opt)}
+            onPress={() => {
+              haptics.selection();
+              onChange(active ? null : opt);
+            }}
             style={[
               styles.btn,
               { backgroundColor: active ? colors.accentDim : colors.surface2, borderColor: active ? colors.accent : colors.border },

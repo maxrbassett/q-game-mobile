@@ -11,6 +11,7 @@ import { useApp } from "../context/AppContext";
 import { listUsers, startRound } from "../services/gameService";
 import { getChoices } from "../data/choices";
 import { fonts, radii } from "../theme";
+import { haptics } from "../services/haptics";
 
 export default function SendModalScreen({ route, navigation, colors }) {
   const { question, answer } = route.params;
@@ -53,6 +54,7 @@ export default function SendModalScreen({ route, navigation, colors }) {
     setError("");
     try {
       await startRound(user.id, picked.id, question.id, answer ?? {}, note);
+      haptics.success();
       setSentTo(picked);
     } catch (err) {
       setError(err?.message ?? "Failed to send.");

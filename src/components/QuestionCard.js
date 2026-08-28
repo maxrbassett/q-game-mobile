@@ -20,6 +20,7 @@ import { useApp } from "../context/AppContext";
 import { getChoices } from "../data/choices";
 import { CATEGORY_COLORS, fonts, radii } from "../theme";
 import ChoiceButtons from "./ChoiceButtons";
+import { haptics } from "../services/haptics";
 
 const SWIPE_THRESHOLD = 100;
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -49,6 +50,7 @@ export default function QuestionCard({ colors, navigation }) {
   }, [currentQuestion?.id]);
 
   const animateOffThenAdvance = (direction, advance) => {
+    haptics.light();
     Animated.timing(position, {
       toValue: { x: direction * SCREEN_WIDTH * 1.2, y: 0 },
       duration: 200,
@@ -96,6 +98,7 @@ export default function QuestionCard({ colors, navigation }) {
   const hasAnswer = !!(savedAnswer && (savedAnswer.choice || savedAnswer.text?.trim()));
 
   const handleChoiceSelect = (option) => {
+    haptics.selection();
     const nextChoice = savedAnswer?.choice === option ? null : option;
     saveAnswer(currentQuestion.id, { choice: nextChoice, text: "" });
   };
@@ -124,7 +127,13 @@ export default function QuestionCard({ colors, navigation }) {
               {currentQuestion.category}
             </Text>
           </View>
-          <Pressable onPress={() => toggleFavorite(currentQuestion.id)} hitSlop={12}>
+          <Pressable
+            onPress={() => {
+              haptics.medium();
+              toggleFavorite(currentQuestion.id);
+            }}
+            hitSlop={12}
+          >
             <Text style={{ fontSize: 22, color: favorite ? colors.accent : colors.inkFaint }}>
               {favorite ? "★" : "☆"}
             </Text>
