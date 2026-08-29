@@ -194,13 +194,13 @@ export default function QuestionCard({ colors, navigation }) {
       <View style={styles.navRow}>
         <Pressable
           onPress={() => animateOffThenAdvance(1, prevQuestion)}
-          style={[styles.navButton, { borderColor: colors.border }]}
+          style={[styles.navButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
         >
           <Text style={{ color: colors.inkMuted, fontSize: 20 }}>‹</Text>
         </Pressable>
         <Pressable
           onPress={() => animateOffThenAdvance(-1, nextQuestion)}
-          style={[styles.navButton, { borderColor: colors.border }]}
+          style={[styles.navButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
         >
           <Text style={{ color: colors.inkMuted, fontSize: 20 }}>›</Text>
         </Pressable>
@@ -223,12 +223,18 @@ const styles = StyleSheet.create({
   },
   card: {
     width: "100%",
-    minHeight: 380,
+    minHeight: 340,
     borderRadius: radii.card,
     borderWidth: 1,
     padding: 24,
     justifyContent: "flex-start",
-    gap: 24,
+    gap: 20,
+    // A floating card reads as more "game-like" than a flat bordered box.
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.14,
+    shadowRadius: 24,
+    elevation: 6,
   },
   headerRow: {
     flexDirection: "row",
@@ -284,5 +290,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
 });

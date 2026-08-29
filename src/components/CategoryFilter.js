@@ -12,6 +12,7 @@ export default function CategoryFilter({ colors }) {
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
+      style={styles.scroll}
       contentContainerStyle={styles.row}
     >
       <Pill
@@ -60,7 +61,13 @@ function Pill({ label, active, onPress, color, colors }) {
 }
 
 const styles = StyleSheet.create({
+  scroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   row: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
