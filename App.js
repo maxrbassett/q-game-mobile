@@ -1,5 +1,6 @@
 import React, { useCallback } from "react";
 import { View } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
@@ -32,25 +33,29 @@ export default function App() {
 
   if (!vibeId) {
     return (
-      <SafeAreaProvider>
-        <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-          <WelcomeScreen onPick={setVibe} />
-          <StatusBar style="light" />
-        </View>
-      </SafeAreaProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+            <WelcomeScreen onPick={setVibe} />
+            <StatusBar style="light" />
+          </View>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
     );
   }
 
   const isDark = VIBES[vibeId].isDark;
 
   return (
-    <SafeAreaProvider>
-      <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-        <AppProvider>
-          <RootNavigator isDark={isDark} colors={colors} vibeId={vibeId} setVibe={setVibe} />
-        </AppProvider>
-        <StatusBar style={isDark ? "light" : "dark"} />
-      </View>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+          <AppProvider>
+            <RootNavigator isDark={isDark} colors={colors} vibeId={vibeId} setVibe={setVibe} />
+          </AppProvider>
+          <StatusBar style={isDark ? "light" : "dark"} />
+        </View>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

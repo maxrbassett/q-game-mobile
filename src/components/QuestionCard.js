@@ -3,23 +3,20 @@
  * feature set: progress bar + counter, category label, question text (or
  * choice buttons), a tag row, a footer (answered badge / send / favorite),
  * a separate collapsible "answer / additional thoughts" section, and
- * full-width Prev/Next buttons. Swipe left/right (or the nav buttons) move
- * through the deck via PanResponder + Animated, mirroring the web app's
- * useSwipe touch-threshold behavior.
+ * full-width Prev/Next buttons.
+ *
+ * Swipe left/right (or the nav buttons) move through the deck. Uses
+ * react-native-gesture-handler's Pan gesture rather than core PanResponder —
+ * the card lives inside a ScrollView (the answer section below it needs to
+ * scroll), and PanResponder's JS-thread-only gesture arbitration doesn't
+ * negotiate cleanly with an enclosing ScrollView (symptom: the swipe
+ * randomly "gets stuck"). Gesture Handler's native recognizer resolves that
+ * correctly via activeOffsetX/failOffsetY below.
  */
 
 import React, { useState, useEffect, useRef } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Animated,
-  PanResponder,
-  Dimensions,
-} from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, Animated, Dimensions } from "react-native";
+import { ScrollView, Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useApp } from "../context/AppContext";
 import { getChoices } from "../data/choices";
 import { tagLabel } from "../data/tags";
@@ -81,24 +78,21 @@ export default function QuestionCard({ colors, navigation }) {
     });
   };
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_e, gesture) =>
-        Math.abs(gesture.dx) > 8 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
-      onPanResponderMove: (_e, gesture) => {
-        position.setValue({ x: gesture.dx, y: 0 });
-      },
-      onPanResponderRelease: (_e, gesture) => {
-        if (gesture.dx < -SWIPE_THRESHOLD) {
-          animateOffThenAdvance(-1, nextQuestion);
-        } else if (gesture.dx > SWIPE_THRESHOLD) {
-          animateOffThenAdvance(1, prevQuestion);
-        } else {
-          Animated.spring(position, { toValue: { x: 0, y: 0 }, useNativeDriver: true }).start();
-        }
-      },
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-10, 10])
+    .failOffsetY([-15, 15])
+    .onUpdate((e) => {
+      position.setValue({ x: e.translationX, y: 0 });
     })
-  ).current;
+    .onEnd((e) => {
+      if (e.translationX < -SWIPE_THRESHOLD) {
+        animateOffThenAdvance(-1, nextQuestion);
+      } else if (e.translationX > SWIPE_THRESHOLD) {
+        animateOffThenAdvance(1, prevQuestion);
+      } else {
+        Animated.spring(position, { toValue: { x: 0, y: 0 }, useNativeDriver: true }).start();
+      }
+    });
 
   if (!currentQuestion) {
     return (
@@ -172,77 +166,78 @@ export default function QuestionCard({ colors, navigation }) {
         {currentIndex + 1} / {deck.length}
       </Text>
 
-      <Animated.View
-        {...panResponder.panHandlers}
-        style={[
-          styles.card,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-            borderTopColor: accent,
-            transform: [{ translateX: position.x }, { rotate }],
-          },
-        ]}
-      >
-        <Text style={[styles.categoryText, { color: accent, fontFamily: fonts.bodyMedium }]}>
-          {currentQuestion.category}
-        </Text>
+      <GestureDetector gesture={panGesture}>
+        <Animated.View
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderTopColor: accent,
+              transform: [{ translateX: position.x }, { rotate }],
+            },
+          ]}
+        >
+          <Text style={[styles.categoryText, { color: accent, fontFamily: fonts.bodyMedium }]}>
+            {currentQuestion.category}
+          </Text>
 
-        <Text style={[styles.questionText, { color: colors.ink, fontFamily: fonts.display }]}>
-          {displayText}
-        </Text>
+          <Text style={[styles.questionText, { color: colors.ink, fontFamily: fonts.display }]}>
+            {displayText}
+          </Text>
 
-        {hasChoices && (
-          <ChoiceButtons choices={choices} selected={selectedChoice} onSelect={handleChoiceSelect} colors={colors} />
-        )}
-
-        <View style={styles.tagRow}>
-          {questionTags.map((slug) => (
-            <TagChip key={slug} slug={slug} colors={colors} onPress={selectTag} onRemove={handleRemoveTag} />
-          ))}
-          <Pressable
-            onPress={() => setTagPickerOpen(true)}
-            style={[styles.tagAddBtn, { borderColor: colors.border }]}
-          >
-            <Text style={{ color: colors.inkMuted, fontSize: 12 }}>+ tag</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.footerRow}>
-          {hasAnswer ? (
-            <Text style={[styles.answeredBadge, { color: "#47e87a" }]}>✓ Answered</Text>
-          ) : (
-            <View />
+          {hasChoices && (
+            <ChoiceButtons choices={choices} selected={selectedChoice} onSelect={handleChoiceSelect} colors={colors} />
           )}
-          <View style={styles.footerRight}>
-            {!!user && (
-              <Pressable
-                disabled={!hasAnswer}
-                onPress={() =>
-                  navigation.navigate("SendModal", { question: currentQuestion, answer: existingAnswer })
-                }
-                style={[
-                  styles.roundBtn,
-                  { backgroundColor: colors.surface2, opacity: hasAnswer ? 1 : 0.35 },
-                ]}
-              >
-                <Text style={{ fontSize: 18, color: hasAnswer ? colors.accent : colors.inkMuted }}>➤</Text>
-              </Pressable>
-            )}
+
+          <View style={styles.tagRow}>
+            {questionTags.map((slug) => (
+              <TagChip key={slug} slug={slug} colors={colors} onPress={selectTag} onRemove={handleRemoveTag} />
+            ))}
             <Pressable
-              onPress={() => {
-                haptics.medium();
-                toggleFavorite(currentQuestion.id);
-              }}
-              style={[styles.roundBtn, { backgroundColor: colors.surface2 }]}
+              onPress={() => setTagPickerOpen(true)}
+              style={[styles.tagAddBtn, { borderColor: colors.border }]}
             >
-              <Text style={{ fontSize: 20, color: favorite ? colors.accent : colors.inkMuted }}>
-                {favorite ? "♥" : "♡"}
-              </Text>
+              <Text style={{ color: colors.inkMuted, fontSize: 12 }}>+ tag</Text>
             </Pressable>
           </View>
-        </View>
-      </Animated.View>
+
+          <View style={styles.footerRow}>
+            {hasAnswer ? (
+              <Text style={[styles.answeredBadge, { color: "#47e87a" }]}>✓ Answered</Text>
+            ) : (
+              <View />
+            )}
+            <View style={styles.footerRight}>
+              {!!user && (
+                <Pressable
+                  disabled={!hasAnswer}
+                  onPress={() =>
+                    navigation.navigate("SendModal", { question: currentQuestion, answer: existingAnswer })
+                  }
+                  style={[
+                    styles.roundBtn,
+                    { backgroundColor: colors.surface2, opacity: hasAnswer ? 1 : 0.35 },
+                  ]}
+                >
+                  <Text style={{ fontSize: 18, color: hasAnswer ? colors.accent : colors.inkMuted }}>➤</Text>
+                </Pressable>
+              )}
+              <Pressable
+                onPress={() => {
+                  haptics.medium();
+                  toggleFavorite(currentQuestion.id);
+                }}
+                style={[styles.roundBtn, { backgroundColor: colors.surface2 }]}
+              >
+                <Text style={{ fontSize: 20, color: favorite ? colors.accent : colors.inkMuted }}>
+                  {favorite ? "♥" : "♡"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </Animated.View>
+      </GestureDetector>
 
       {/* Answer / additional-thoughts section */}
       <View style={[styles.answerSection, { borderColor: colors.border, backgroundColor: colors.surface }]}>
