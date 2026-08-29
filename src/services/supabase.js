@@ -7,7 +7,11 @@
  * guest mode without crashing, same convention as the web app.
  *
  * RN-specific differences from the web client:
- *   - `detectSessionInUrl: false` — there's no browser URL to inspect.
+ *   - `detectSessionInUrl: false` — there's no browser URL to auto-inspect;
+ *     the OAuth redirect is captured explicitly (see signInWithGoogle in
+ *     AppContext) and exchanged via exchangeCodeForSession.
+ *   - `flowType: "pkce"` — required for that explicit code exchange, and the
+ *     correct flow for a public client that can't hold a secret.
  *   - AsyncStorage as the session storage adapter, not localStorage.
  *   - react-native-url-polyfill/auto, imported first: RN's JS engine has no
  *     built-in URL/URLSearchParams, which postgrest-js and realtime-js need.
@@ -28,6 +32,7 @@ export const supabase =
           persistSession: true,
           autoRefreshToken: true,
           detectSessionInUrl: false,
+          flowType: "pkce",
         },
       })
     : null;

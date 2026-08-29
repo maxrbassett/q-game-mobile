@@ -3,6 +3,7 @@
     "name": "q-game-mobile",
     "slug": "q-game-mobile",
     "version": "1.0.0",
+    "scheme": "qgame",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -33,7 +34,8 @@
             "backgroundColor": "#12161c"
           }
         }
-      ]
+      ],
+      "expo-web-browser"
     ]
   }
 }

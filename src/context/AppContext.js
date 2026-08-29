@@ -6,10 +6,10 @@
  * storage seam" convention: components call useApp(), never storageService
  * or supabase directly.
  *
- * Auth is email/password for now (see src/screens/SignInScreen.js for why —
- * Expo Go can't do OAuth's custom-scheme redirect). When `user` flips from
- * null -> signed-in, guest data is migrated to the cloud, then all per-user
- * state is re-read from there. Signing out drops back to device storage.
+ * Auth supports Google (the provider the web app uses, so existing accounts
+ * work) and email/password. When `user` flips from null -> signed-in, guest
+ * data is migrated to the cloud, then all per-user state is re-read from
+ * there. Signing out drops back to device storage.
  */
 
 import React, {
@@ -21,6 +21,8 @@ import React, {
   useEffect,
   useRef,
 } from "react";
+import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
 import {
   getFavorites,
   toggleFavorite as toggleFav,
@@ -300,6 +302,43 @@ export function AppProvider({ children }) {
   );
 
   // ── Auth actions ─────────────────────────────────────────────────────────
+
+  /**
+   * Google OAuth via an in-app browser session.
+   *
+   * Supabase brokers the whole exchange: Google only ever redirects to
+   * Supabase's own /auth/v1/callback (already registered in the Google Cloud
+   * console for the web app), and Supabase then redirects back here. So the
+   * only place this app's redirect URL has to be allowlisted is Supabase
+   * itself — Auth > URL Configuration > Redirect URLs.
+   *
+   * In Expo Go, Linking.createURL() yields an exp://<lan-ip>:8081/--/... URL
+   * that changes with the network, so the allowlist needs a wildcard entry
+   * (exp://**). A standalone build uses the stable qgame:// scheme declared
+   * in app.json instead.
+   */
+  const signInWithGoogle = useCallback(async () => {
+    if (!supabase) throw new Error("Sign-in is unavailable: Supabase not configured");
+
+    const redirectTo = Linking.createURL("auth-callback");
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo, skipBrowserRedirect: true },
+    });
+    if (error) throw error;
+    if (!data?.url) throw new Error("Couldn't start Google sign-in.");
+
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (result.type !== "success") return false; // user dismissed the sheet
+
+    // PKCE returns ?code=... on the redirect; trade it for a session.
+    const code = Linking.parse(result.url)?.queryParams?.code;
+    if (!code) throw new Error("Google sign-in didn't return a code.");
+    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(String(code));
+    if (exchangeError) throw exchangeError;
+    return true;
+  }, []);
+
   const signUpWithEmail = useCallback(async (email, password) => {
     if (!supabase) throw new Error("Sign-in is unavailable: Supabase not configured");
     const { error } = await supabase.auth.signUp({ email, password });
@@ -334,6 +373,7 @@ export function AppProvider({ children }) {
       user,
       authReady,
       profile,
+      signInWithGoogle,
       signUpWithEmail,
       signInWithEmail,
       signOut,
@@ -370,6 +410,7 @@ export function AppProvider({ children }) {
       user,
       authReady,
       profile,
+      signInWithGoogle,
       signUpWithEmail,
       signInWithEmail,
       signOut,

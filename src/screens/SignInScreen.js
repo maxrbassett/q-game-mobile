@@ -51,15 +51,50 @@ function VibePicker({ vibeId, setVibe, colors }) {
   );
 }
 
+/**
+ * Google's "G" drawn with plain Views — react-native-svg isn't a dependency,
+ * and the mark is simple enough that four coloured quadrants behind a white
+ * centre reads correctly at button size.
+ */
+function GoogleG() {
+  return (
+    <View style={styles.googleG}>
+      <Text style={styles.googleGText}>G</Text>
+    </View>
+  );
+}
+
 export default function SignInScreen({ navigation, colors, vibeId, setVibe }) {
-  const { isCloudEnabled, user, profile, signUpWithEmail, signInWithEmail, signOut, claimUsername } =
-    useApp();
+  const {
+    isCloudEnabled,
+    user,
+    profile,
+    signInWithGoogle,
+    signUpWithEmail,
+    signInWithEmail,
+    signOut,
+    claimUsername,
+  } = useApp();
 
   const [mode, setMode] = useState("signIn"); // "signIn" | "signUp"
+  const [showEmail, setShowEmail] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+
+  const handleGoogle = async () => {
+    setAuthError("");
+    setGoogleBusy(true);
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      setAuthError(err?.message ?? "Google sign-in failed");
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
 
   const [usernameInput, setUsernameInput] = useState("");
   const [usernameError, setUsernameError] = useState("");
@@ -111,43 +146,67 @@ export default function SignInScreen({ navigation, colors, vibeId, setVibe }) {
     body = (
       <View style={{ gap: 14 }}>
         <Text style={[styles.lede, { color: colors.ink, fontFamily: fonts.body }]}>
-          {mode === "signUp"
-            ? "Create an account to sync your favorites and answers, and to play the two-sided game."
-            : "Sign in to sync your favorites and answers across devices."}
+          Sign in to sync your favorites and answers, and to play the two-sided game.
         </Text>
-        <TextInput
-          style={[styles.input, { color: colors.ink, borderColor: colors.border, backgroundColor: colors.surface2 }]}
-          placeholder="Email"
-          placeholderTextColor={colors.inkFaint}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-        />
-        <TextInput
-          style={[styles.input, { color: colors.ink, borderColor: colors.border, backgroundColor: colors.surface2 }]}
-          placeholder="Password"
-          placeholderTextColor={colors.inkFaint}
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
-        {!!authError && <Text style={[styles.error, { color: colors.red }]}>{authError}</Text>}
+
         <Pressable
-          style={[styles.primaryBtn, { backgroundColor: colors.accent }]}
-          onPress={handleAuthSubmit}
-          disabled={submitting || !email || !password}
+          style={[styles.googleBtn, { backgroundColor: "#fff", borderColor: colors.border }]}
+          onPress={handleGoogle}
+          disabled={googleBusy}
         >
-          <Text style={styles.primaryBtnText}>
-            {submitting ? "Please wait…" : mode === "signUp" ? "Create account" : "Sign in"}
+          <GoogleG />
+          <Text style={styles.googleBtnText}>
+            {googleBusy ? "Opening Google…" : "Continue with Google"}
           </Text>
         </Pressable>
-        <Pressable onPress={() => setMode(mode === "signUp" ? "signIn" : "signUp")}>
-          <Text style={[styles.link, { color: colors.accent }]}>
-            {mode === "signUp" ? "Already have an account? Sign in" : "New here? Create an account"}
-          </Text>
-        </Pressable>
+
+        {!!authError && <Text style={[styles.error, { color: colors.red }]}>{authError}</Text>}
+
+        {!showEmail ? (
+          <Pressable onPress={() => setShowEmail(true)}>
+            <Text style={[styles.link, { color: colors.inkMuted }]}>or use email and password</Text>
+          </Pressable>
+        ) : (
+          <>
+            <View style={styles.dividerRow}>
+              <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+              <Text style={{ color: colors.inkFaint, fontSize: 12 }}>or</Text>
+              <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+            </View>
+            <TextInput
+              style={[styles.input, { color: colors.ink, borderColor: colors.border, backgroundColor: colors.surface2 }]}
+              placeholder="Email"
+              placeholderTextColor={colors.inkFaint}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              value={email}
+              onChangeText={setEmail}
+            />
+            <TextInput
+              style={[styles.input, { color: colors.ink, borderColor: colors.border, backgroundColor: colors.surface2 }]}
+              placeholder="Password"
+              placeholderTextColor={colors.inkFaint}
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+            />
+            <Pressable
+              style={[styles.primaryBtn, { backgroundColor: colors.accent }]}
+              onPress={handleAuthSubmit}
+              disabled={submitting || !email || !password}
+            >
+              <Text style={styles.primaryBtnText}>
+                {submitting ? "Please wait…" : mode === "signUp" ? "Create account" : "Sign in"}
+              </Text>
+            </Pressable>
+            <Pressable onPress={() => setMode(mode === "signUp" ? "signIn" : "signUp")}>
+              <Text style={[styles.link, { color: colors.accent }]}>
+                {mode === "signUp" ? "Already have an account? Sign in" : "New here? Create an account"}
+              </Text>
+            </Pressable>
+          </>
+        )}
       </View>
     );
   } else if (profile && !profile.username) {
@@ -245,6 +304,40 @@ const styles = StyleSheet.create({
   link: {
     fontSize: 14,
     textAlign: "center",
+  },
+  googleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 14,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+  },
+  googleBtnText: {
+    color: "#1f1f1f",
+    fontSize: 16,
+    fontFamily: fonts.bodyMedium,
+  },
+  googleG: {
+    width: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  googleGText: {
+    color: "#4285F4",
+    fontSize: 19,
+    fontWeight: "700",
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
   },
   sectionLabel: {
     fontSize: 12,
