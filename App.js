@@ -1,5 +1,6 @@
 import React, { useCallback } from "react";
 import { View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { useFonts, Fraunces_500Medium, Fraunces_600SemiBold } from "@expo-google-fonts/fraunces";
@@ -31,21 +32,25 @@ export default function App() {
 
   if (!vibeId) {
     return (
-      <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-        <WelcomeScreen onPick={setVibe} />
-        <StatusBar style="light" />
-      </View>
+      <SafeAreaProvider>
+        <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+          <WelcomeScreen onPick={setVibe} />
+          <StatusBar style="light" />
+        </View>
+      </SafeAreaProvider>
     );
   }
 
   const isDark = VIBES[vibeId].isDark;
 
   return (
-    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-      <AppProvider>
-        <RootNavigator isDark={isDark} colors={colors} vibeId={vibeId} setVibe={setVibe} />
-      </AppProvider>
-      <StatusBar style={isDark ? "light" : "dark"} />
-    </View>
+    <SafeAreaProvider>
+      <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+        <AppProvider>
+          <RootNavigator isDark={isDark} colors={colors} vibeId={vibeId} setVibe={setVibe} />
+        </AppProvider>
+        <StatusBar style={isDark ? "light" : "dark"} />
+      </View>
+    </SafeAreaProvider>
   );
 }
