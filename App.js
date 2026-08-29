@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback } from "react";
 import { View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
@@ -6,13 +6,14 @@ import { useFonts, Fraunces_500Medium, Fraunces_600SemiBold } from "@expo-google
 import { DMSans_400Regular, DMSans_500Medium } from "@expo-google-fonts/dm-sans";
 
 import { AppProvider } from "./src/context/AppContext";
-import { useTheme } from "./src/theme";
+import { useVibe, VIBES } from "./src/theme";
 import RootNavigator from "./src/navigation/RootNavigator";
+import WelcomeScreen from "./src/screens/WelcomeScreen";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function App() {
-  const [theme, , colors] = useTheme();
+  const [vibeId, setVibe, colors, vibeReady] = useVibe();
   const [fontsLoaded] = useFonts({
     Fraunces_500Medium,
     Fraunces_600SemiBold,
@@ -20,18 +21,31 @@ export default function App() {
     DMSans_500Medium,
   });
 
-  const onLayoutRootView = useCallback(async () => {
-    if (fontsLoaded) await SplashScreen.hideAsync();
-  }, [fontsLoaded]);
+  const ready = fontsLoaded && vibeReady;
 
-  if (!fontsLoaded) return null;
+  const onLayoutRootView = useCallback(async () => {
+    if (ready) await SplashScreen.hideAsync();
+  }, [ready]);
+
+  if (!ready) return null;
+
+  if (!vibeId) {
+    return (
+      <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+        <WelcomeScreen onPick={setVibe} />
+        <StatusBar style="light" />
+      </View>
+    );
+  }
+
+  const isDark = VIBES[vibeId].isDark;
 
   return (
     <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
       <AppProvider>
-        <RootNavigator theme={theme} colors={colors} />
+        <RootNavigator isDark={isDark} colors={colors} vibeId={vibeId} setVibe={setVibe} />
       </AppProvider>
-      <StatusBar style={theme === "dark" ? "light" : "dark"} />
+      <StatusBar style={isDark ? "light" : "dark"} />
     </View>
   );
 }

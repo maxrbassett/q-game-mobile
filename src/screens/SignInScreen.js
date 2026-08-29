@@ -9,11 +9,49 @@ import React, { useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useApp } from "../context/AppContext";
-import { fonts, radii } from "../theme";
+import { fonts, radii, VIBES } from "../theme";
+import { haptics } from "../services/haptics";
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
+const VIBE_ORDER = ["partier", "thinker", "surfer", "dreamer"];
 
-export default function SignInScreen({ navigation, colors }) {
+function VibePicker({ vibeId, setVibe, colors }) {
+  if (!setVibe) return null;
+  return (
+    <View style={{ gap: 10 }}>
+      <Text style={[styles.sectionLabel, { color: colors.inkMuted }]}>Appearance</Text>
+      <View style={styles.vibeRow}>
+        {VIBE_ORDER.map((id) => {
+          const vibe = VIBES[id];
+          const active = vibeId === id;
+          return (
+            <Pressable
+              key={id}
+              onPress={() => {
+                haptics.selection();
+                setVibe(id);
+              }}
+              style={[
+                styles.vibeChip,
+                {
+                  backgroundColor: vibe.colors.bg,
+                  borderColor: active ? colors.accent : "transparent",
+                },
+              ]}
+            >
+              <Text style={{ fontSize: 18 }}>{vibe.emoji}</Text>
+              <Text style={{ color: vibe.colors.ink, fontFamily: fonts.bodyMedium, fontSize: 12, marginTop: 4 }}>
+                {vibe.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+export default function SignInScreen({ navigation, colors, vibeId, setVibe }) {
   const { isCloudEnabled, user, profile, signUpWithEmail, signInWithEmail, signOut, claimUsername } =
     useApp();
 
@@ -167,6 +205,7 @@ export default function SignInScreen({ navigation, colors }) {
             <Text style={{ color: colors.inkMuted, fontSize: 22 }}>✕</Text>
           </Pressable>
         </View>
+        <VibePicker vibeId={vibeId} setVibe={setVibe} colors={colors} />
         {body}
       </ScrollView>
     </SafeAreaView>
@@ -206,5 +245,21 @@ const styles = StyleSheet.create({
   link: {
     fontSize: 14,
     textAlign: "center",
+  },
+  sectionLabel: {
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  vibeRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  vibeChip: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 12,
+    borderRadius: 16,
+    borderWidth: 2,
   },
 });

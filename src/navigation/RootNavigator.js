@@ -16,11 +16,11 @@ import SendModalScreen from "../screens/SendModalScreen";
 
 const Stack = createNativeStackNavigator();
 
-export default function RootNavigator({ theme, colors }) {
+export default function RootNavigator({ isDark, colors, vibeId, setVibe }) {
   const navTheme = {
-    ...(theme === "dark" ? DarkTheme : DefaultTheme),
+    ...(isDark ? DarkTheme : DefaultTheme),
     colors: {
-      ...(theme === "dark" ? DarkTheme.colors : DefaultTheme.colors),
+      ...(isDark ? DarkTheme.colors : DefaultTheme.colors),
       background: colors.bg,
       card: colors.surface,
       text: colors.ink,
@@ -36,7 +36,9 @@ export default function RootNavigator({ theme, colors }) {
           {({ navigation }) => <DeckScreen colors={colors} navigation={navigation} />}
         </Stack.Screen>
         <Stack.Screen name="SignIn" options={{ presentation: "modal" }}>
-          {({ navigation }) => <SignInScreen colors={colors} navigation={navigation} />}
+          {({ navigation }) => (
+            <SignInScreen colors={colors} navigation={navigation} vibeId={vibeId} setVibe={setVibe} />
+          )}
         </Stack.Screen>
         <Stack.Screen name="GamesList" options={{ presentation: "modal" }}>
           {({ navigation }) => <GamesListScreen colors={colors} navigation={navigation} />}

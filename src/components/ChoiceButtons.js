@@ -5,10 +5,10 @@
 
 import React from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
-import { palettes, fonts, radii } from "../theme";
+import { VIBES, fonts, radii } from "../theme";
 
 export default function ChoiceButtons({ choices, selected, onSelect, colors }) {
-  const c = colors ?? palettes.dark;
+  const c = colors ?? VIBES.thinker.colors;
   const isBinary = choices.type === "binary";
 
   return (
