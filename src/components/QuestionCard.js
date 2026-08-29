@@ -1,8 +1,11 @@
 /**
- * The main swipeable card: category label, question text (or choice
- * buttons), a free-response input, and a favorite toggle. Swipe left/right
- * (or the arrow buttons) move through the deck, mirroring the web app's
- * useSwipe touch-threshold behavior via PanResponder + Animated.
+ * The main swipeable card, ported to match the web app's QuestionCard.jsx
+ * feature set: progress bar + counter, category label, question text (or
+ * choice buttons), a tag row, a footer (answered badge / send / favorite),
+ * a separate collapsible "answer / additional thoughts" section, and
+ * full-width Prev/Next buttons. Swipe left/right (or the nav buttons) move
+ * through the deck via PanResponder + Animated, mirroring the web app's
+ * useSwipe touch-threshold behavior.
  */
 
 import React, { useState, useEffect, useRef } from "react";
@@ -11,6 +14,7 @@ import {
   Text,
   TextInput,
   Pressable,
+  ScrollView,
   StyleSheet,
   Animated,
   PanResponder,
@@ -18,8 +22,10 @@ import {
 } from "react-native";
 import { useApp } from "../context/AppContext";
 import { getChoices } from "../data/choices";
+import { tagLabel } from "../data/tags";
 import { CATEGORY_COLORS, fonts, radii } from "../theme";
 import ChoiceButtons from "./ChoiceButtons";
+import TagPickerModal from "./TagPickerModal";
 import { haptics } from "../services/haptics";
 
 const SWIPE_THRESHOLD = 100;
@@ -28,25 +34,39 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 export default function QuestionCard({ colors, navigation }) {
   const {
     currentQuestion,
+    currentIndex,
+    deck,
     nextQuestion,
     prevQuestion,
     toggleFavorite,
     isFavorite,
     getAnswer,
     saveAnswer,
+    deleteAnswer,
+    getTagsForQuestion,
+    setTagsForQuestion,
+    selectTag,
     user,
   } = useApp();
 
   const position = useRef(new Animated.ValueXY()).current;
-  const [text, setText] = useState("");
+  const [answerOpen, setAnswerOpen] = useState(true);
+  const [answerText, setAnswerText] = useState("");
+  const [selectedChoice, setSelectedChoice] = useState(null);
+  const [tagPickerOpen, setTagPickerOpen] = useState(false);
 
   const choices = currentQuestion ? getChoices(currentQuestion) : null;
-  const savedAnswer = currentQuestion ? getAnswer(currentQuestion.id) : null;
+  const hasChoices = !!choices;
+  const questionTags = currentQuestion ? getTagsForQuestion(currentQuestion) : [];
   const favorite = currentQuestion ? isFavorite(currentQuestion.id) : false;
 
-  // Reset local text draft when the card changes.
+  // Reset local answer draft + reopen the answer section when the card changes.
   useEffect(() => {
-    setText(savedAnswer?.text ?? "");
+    if (!currentQuestion) return;
+    const existing = getAnswer(currentQuestion.id);
+    setAnswerText(existing?.text ?? "");
+    setSelectedChoice(existing?.choice ?? null);
+    setAnswerOpen(true);
   }, [currentQuestion?.id]);
 
   const animateOffThenAdvance = (direction, advance) => {
@@ -95,21 +115,63 @@ export default function QuestionCard({ colors, navigation }) {
 
   const accent = CATEGORY_COLORS[currentQuestion.category] ?? colors.accent;
   const displayText = choices?.displayText ?? currentQuestion.text;
-  const hasAnswer = !!(savedAnswer && (savedAnswer.choice || savedAnswer.text?.trim()));
+  const existingAnswer = getAnswer(currentQuestion.id);
+  const hasAnswer = !!existingAnswer;
+
+  const persist = (nextChoice, nextText) => {
+    const text = (nextText ?? "").trim();
+    if (!text && !nextChoice) {
+      deleteAnswer(currentQuestion.id);
+    } else {
+      saveAnswer(currentQuestion.id, { text, choice: nextChoice ?? null });
+    }
+  };
 
   const handleChoiceSelect = (option) => {
     haptics.selection();
-    const nextChoice = savedAnswer?.choice === option ? null : option;
-    saveAnswer(currentQuestion.id, { choice: nextChoice, text: "" });
+    const next = selectedChoice === option ? null : option;
+    setSelectedChoice(next);
+    persist(next, answerText);
   };
 
-  const handleTextBlur = () => {
-    const trimmed = text.trim();
-    if (trimmed) saveAnswer(currentQuestion.id, { text: trimmed, choice: null });
+  const handleSave = () => {
+    haptics.success();
+    persist(selectedChoice, answerText);
   };
+
+  const handleDelete = () => {
+    deleteAnswer(currentQuestion.id);
+    setAnswerText("");
+    setSelectedChoice(null);
+  };
+
+  const handleRemoveTag = (slug) => {
+    setTagsForQuestion(currentQuestion.id, questionTags.filter((t) => t !== slug));
+  };
+
+  const toggleLabel = hasChoices
+    ? answerText
+      ? "Edit additional thoughts"
+      : "Add additional thoughts"
+    : hasAnswer
+      ? "Edit my answer"
+      : "Write my answer";
 
   return (
-    <View style={styles.wrap}>
+    <ScrollView style={styles.wrap} contentContainerStyle={styles.wrapContent} keyboardShouldPersistTaps="handled">
+      {/* Progress bar + counter */}
+      <View style={[styles.progressTrack, { backgroundColor: colors.surface2 }]}>
+        <View
+          style={[
+            styles.progressBar,
+            { backgroundColor: accent, width: `${((currentIndex + 1) / Math.max(deck.length, 1)) * 100}%` },
+          ]}
+        />
+      </View>
+      <Text style={[styles.counter, { color: colors.inkFaint }]}>
+        {currentIndex + 1} / {deck.length}
+      </Text>
+
       <Animated.View
         {...panResponder.panHandlers}
         style={[
@@ -117,94 +179,153 @@ export default function QuestionCard({ colors, navigation }) {
           {
             backgroundColor: colors.surface,
             borderColor: colors.border,
+            borderTopColor: accent,
             transform: [{ translateX: position.x }, { rotate }],
           },
         ]}
       >
-        <View style={styles.headerRow}>
-          <View style={[styles.categoryPill, { backgroundColor: `${accent}26`, borderColor: accent }]}>
-            <Text style={[styles.categoryText, { color: accent, fontFamily: fonts.bodyMedium }]}>
-              {currentQuestion.category}
-            </Text>
-          </View>
-          <Pressable
-            onPress={() => {
-              haptics.medium();
-              toggleFavorite(currentQuestion.id);
-            }}
-            hitSlop={12}
-          >
-            <Text style={{ fontSize: 22, color: favorite ? colors.accent : colors.inkFaint }}>
-              {favorite ? "★" : "☆"}
-            </Text>
-          </Pressable>
-        </View>
+        <Text style={[styles.categoryText, { color: accent, fontFamily: fonts.bodyMedium }]}>
+          {currentQuestion.category}
+        </Text>
 
         <Text style={[styles.questionText, { color: colors.ink, fontFamily: fonts.display }]}>
           {displayText}
         </Text>
 
-        {choices ? (
-          <ChoiceButtons
-            choices={choices}
-            selected={savedAnswer?.choice ?? null}
-            onSelect={handleChoiceSelect}
-            colors={colors}
-          />
-        ) : (
-          <TextInput
-            style={[
-              styles.input,
-              { color: colors.ink, borderColor: colors.border, backgroundColor: colors.surface2, fontFamily: fonts.body },
-            ]}
-            placeholder="Your answer…"
-            placeholderTextColor={colors.inkFaint}
-            value={text}
-            onChangeText={setText}
-            onEndEditing={handleTextBlur}
-            multiline
-          />
+        {hasChoices && (
+          <ChoiceButtons choices={choices} selected={selectedChoice} onSelect={handleChoiceSelect} colors={colors} />
         )}
 
-        {!!user && (
-          <View style={styles.footerRow}>
-            {hasAnswer && (
-              <Text style={{ color: colors.inkMuted, fontSize: 12, fontFamily: fonts.bodyMedium }}>
-                ✓ Answered
-              </Text>
+        <View style={styles.tagRow}>
+          {questionTags.map((slug) => (
+            <TagChip key={slug} slug={slug} colors={colors} onPress={selectTag} onRemove={handleRemoveTag} />
+          ))}
+          <Pressable
+            onPress={() => setTagPickerOpen(true)}
+            style={[styles.tagAddBtn, { borderColor: colors.border }]}
+          >
+            <Text style={{ color: colors.inkMuted, fontSize: 12 }}>+ tag</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.footerRow}>
+          {hasAnswer ? (
+            <Text style={[styles.answeredBadge, { color: "#47e87a" }]}>✓ Answered</Text>
+          ) : (
+            <View />
+          )}
+          <View style={styles.footerRight}>
+            {!!user && (
+              <Pressable
+                disabled={!hasAnswer}
+                onPress={() =>
+                  navigation.navigate("SendModal", { question: currentQuestion, answer: existingAnswer })
+                }
+                style={[
+                  styles.roundBtn,
+                  { backgroundColor: colors.surface2, opacity: hasAnswer ? 1 : 0.35 },
+                ]}
+              >
+                <Text style={{ fontSize: 18, color: hasAnswer ? colors.accent : colors.inkMuted }}>➤</Text>
+              </Pressable>
             )}
             <Pressable
-              disabled={!hasAnswer}
-              onPress={() =>
-                navigation.navigate("SendModal", { question: currentQuestion, answer: savedAnswer })
-              }
-              style={[
-                styles.sendBtn,
-                { borderColor: colors.border, backgroundColor: hasAnswer ? colors.accentDim : colors.surface2 },
-              ]}
+              onPress={() => {
+                haptics.medium();
+                toggleFavorite(currentQuestion.id);
+              }}
+              style={[styles.roundBtn, { backgroundColor: colors.surface2 }]}
             >
-              <Text style={{ color: hasAnswer ? colors.accent : colors.inkFaint, fontFamily: fonts.bodyMedium, fontSize: 13 }}>
-                Send to a friend
+              <Text style={{ fontSize: 20, color: favorite ? colors.accent : colors.inkMuted }}>
+                {favorite ? "♥" : "♡"}
               </Text>
             </Pressable>
           </View>
-        )}
+        </View>
       </Animated.View>
+
+      {/* Answer / additional-thoughts section */}
+      <View style={[styles.answerSection, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+        <Pressable style={styles.answerToggle} onPress={() => setAnswerOpen((v) => !v)}>
+          <Text style={{ fontSize: 15 }}>✎</Text>
+          <Text style={[styles.answerToggleText, { color: colors.inkMuted, fontFamily: fonts.body }]}>
+            {toggleLabel}
+          </Text>
+          <Text style={{ color: colors.inkFaint, marginLeft: "auto" }}>{answerOpen ? "︿" : "﹀"}</Text>
+        </Pressable>
+
+        {answerOpen && (
+          <View style={styles.answerBody}>
+            <TextInput
+              style={[styles.textarea, { color: colors.ink, borderColor: colors.border, backgroundColor: colors.surface2 }]}
+              placeholder={hasChoices ? "Additional thoughts (optional)…" : "Type your answer here…"}
+              placeholderTextColor={colors.inkFaint}
+              value={answerText}
+              onChangeText={setAnswerText}
+              multiline
+            />
+            <View style={styles.answerActions}>
+              {hasAnswer && (
+                <Pressable onPress={handleDelete}>
+                  <Text style={{ color: colors.red, fontFamily: fonts.bodyMedium }}>Delete</Text>
+                </Pressable>
+              )}
+              <Pressable
+                onPress={handleSave}
+                disabled={!answerText.trim() && !hasAnswer}
+                style={[
+                  styles.saveBtn,
+                  { backgroundColor: !answerText.trim() && !hasAnswer ? colors.surface2 : accent, marginLeft: "auto" },
+                ]}
+              >
+                <Text style={{ color: !answerText.trim() && !hasAnswer ? colors.inkFaint : "#1a1820", fontFamily: fonts.bodyMedium }}>
+                  {hasAnswer ? "Update" : "Save"} {hasChoices ? "Notes" : "Answer"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+      </View>
 
       <View style={styles.navRow}>
         <Pressable
-          onPress={() => animateOffThenAdvance(1, prevQuestion)}
-          style={[styles.navButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
+          onPress={() => currentIndex > 0 && animateOffThenAdvance(1, prevQuestion)}
+          disabled={currentIndex === 0}
+          style={[styles.navButton, { borderColor: colors.border, backgroundColor: colors.surface, opacity: currentIndex === 0 ? 0.35 : 1 }]}
         >
-          <Text style={{ color: colors.inkMuted, fontSize: 20 }}>‹</Text>
+          <Text style={{ color: colors.inkMuted, fontFamily: fonts.bodyMedium }}>‹ Prev</Text>
         </Pressable>
         <Pressable
           onPress={() => animateOffThenAdvance(-1, nextQuestion)}
           style={[styles.navButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
         >
-          <Text style={{ color: colors.inkMuted, fontSize: 20 }}>›</Text>
+          <Text style={{ color: colors.inkMuted, fontFamily: fonts.bodyMedium }}>Next ›</Text>
         </Pressable>
       </View>
+
+      <Text style={[styles.swipeHint, { color: colors.inkFaint }]}>← swipe or tap Prev / Next →</Text>
+
+      <TagPickerModal
+        visible={tagPickerOpen}
+        question={currentQuestion}
+        onClose={() => setTagPickerOpen(false)}
+        colors={colors}
+      />
+    </ScrollView>
+  );
+}
+
+function TagChip({ slug, colors, onPress, onRemove }) {
+  const { customTags } = useApp();
+  const label = tagLabel(slug, customTags);
+  return (
+    <View style={[styles.tagChip, { backgroundColor: colors.surface2, borderColor: colors.border }]}>
+      <Pressable onPress={() => onPress(slug)}>
+        <Text style={{ color: colors.inkMuted, fontSize: 12 }}>{label}</Text>
+      </Pressable>
+      <Pressable onPress={() => onRemove(slug)} hitSlop={6} style={{ marginLeft: 4 }}>
+        <Text style={{ color: colors.inkFaint, fontSize: 12 }}>✕</Text>
+      </Pressable>
     </View>
   );
 }
@@ -212,89 +333,145 @@ export default function QuestionCard({ colors, navigation }) {
 const styles = StyleSheet.create({
   wrap: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "flex-start",
+  },
+  wrapContent: {
     paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: 12,
+    paddingBottom: 32,
+    gap: 12,
   },
   center: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },
+  progressTrack: {
+    height: 2,
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  progressBar: {
+    height: "100%",
+    borderRadius: 2,
+  },
+  counter: {
+    textAlign: "right",
+    fontSize: 11,
+    letterSpacing: 0.5,
+    marginTop: -6,
+  },
   card: {
     width: "100%",
-    minHeight: 340,
     borderRadius: radii.card,
     borderWidth: 1,
-    padding: 24,
-    justifyContent: "flex-start",
-    gap: 20,
-    // A floating card reads as more "game-like" than a flat bordered box.
+    borderTopWidth: 3,
+    padding: 20,
+    gap: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.14,
     shadowRadius: 24,
     elevation: 6,
   },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  categoryPill: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-  },
   categoryText: {
     fontSize: 12,
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
   questionText: {
-    fontSize: 24,
-    lineHeight: 32,
+    fontSize: 22,
+    lineHeight: 30,
   },
-  input: {
+  tagRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  tagChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 100,
     borderWidth: 1,
-    borderRadius: 14,
-    padding: 14,
-    minHeight: 90,
-    fontSize: 16,
-    textAlignVertical: "top",
+  },
+  tagAddBtn: {
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderStyle: "dashed",
   },
   footerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  sendBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: radii.pill,
-    borderWidth: 1,
+  answeredBadge: {
+    fontSize: 12,
+    fontFamily: fonts.bodyMedium,
+  },
+  footerRight: {
+    flexDirection: "row",
+    gap: 8,
     marginLeft: "auto",
+  },
+  roundBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  answerSection: {
+    borderWidth: 1,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  answerToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 14,
+  },
+  answerToggleText: {
+    fontSize: 14,
+  },
+  answerBody: {
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    gap: 12,
+  },
+  textarea: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    minHeight: 80,
+    fontSize: 15,
+    textAlignVertical: "top",
+  },
+  answerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  saveBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: radii.pill,
   },
   navRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    width: "100%",
-    marginTop: 20,
-    paddingHorizontal: 8,
+    gap: 10,
   },
   navButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
     borderWidth: 1,
     alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+  },
+  swipeHint: {
+    textAlign: "center",
+    fontSize: 11,
   },
 });

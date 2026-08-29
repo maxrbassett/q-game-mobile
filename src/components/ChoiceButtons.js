@@ -1,18 +1,23 @@
 /**
  * Renders the tap-to-select buttons for a parsed `Choices` object
  * (scale | multi | binary — see src/data/choices.js).
+ *
+ * Matches the web app's QuestionCard.module.css layout: binary/multi are a
+ * single column of full-width rectangular buttons, scale is a 3-column
+ * grid of compact tiles. All share the same 12px-radius rectangular style
+ * (not a pill) — the pill shape is reserved for filter chips elsewhere.
  */
 
 import React from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
-import { VIBES, fonts, radii } from "../theme";
+import { VIBES, fonts } from "../theme";
 
 export default function ChoiceButtons({ choices, selected, onSelect, colors }) {
   const c = colors ?? VIBES.thinker.colors;
-  const isBinary = choices.type === "binary";
+  const isScale = choices.type === "scale";
 
   return (
-    <View style={isBinary ? styles.binaryRow : styles.wrap}>
+    <View style={isScale ? styles.scaleGrid : styles.column}>
       {choices.options.map((option) => {
         const active = selected === option;
         return (
@@ -20,7 +25,7 @@ export default function ChoiceButtons({ choices, selected, onSelect, colors }) {
             key={option}
             onPress={() => onSelect(option)}
             style={[
-              isBinary ? styles.binaryButton : styles.pill,
+              isScale ? styles.scaleButton : styles.button,
               {
                 backgroundColor: active ? c.accentDim : c.surface2,
                 borderColor: active ? c.accent : c.border,
@@ -29,8 +34,8 @@ export default function ChoiceButtons({ choices, selected, onSelect, colors }) {
           >
             <Text
               style={[
-                isBinary ? styles.binaryText : styles.pillText,
-                { color: active ? c.accent : c.ink, fontFamily: fonts.bodyMedium },
+                isScale ? styles.scaleText : styles.buttonText,
+                { color: active ? c.accent : c.ink, fontFamily: fonts.body },
               ]}
             >
               {option}
@@ -43,34 +48,34 @@ export default function ChoiceButtons({ choices, selected, onSelect, colors }) {
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    justifyContent: "center",
+  column: {
+    gap: 8,
   },
-  pill: {
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: radii.pill,
+  button: {
+    width: "100%",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
     borderWidth: 1,
   },
-  pillText: {
+  buttonText: {
     fontSize: 15,
   },
-  binaryRow: {
-    flexDirection: "column",
-    gap: 12,
-    width: "100%",
+  scaleGrid: {
+    flexDirection: "row",
+    gap: 8,
   },
-  binaryButton: {
-    paddingVertical: 16,
-    paddingHorizontal: 18,
-    borderRadius: radii.card,
+  scaleButton: {
+    flex: 1,
+    minHeight: 56,
+    paddingHorizontal: 6,
+    borderRadius: 12,
     borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  binaryText: {
-    fontSize: 16,
+  scaleText: {
+    fontSize: 13,
     textAlign: "center",
   },
 });

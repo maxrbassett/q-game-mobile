@@ -27,11 +27,22 @@ import {
   getAnswers,
   saveAnswer as persistAnswer,
   deleteAnswer as removeAnswer,
+  getCustomTags,
+  saveCustomTag,
+  getQuestionTagOverrides,
+  setQuestionTags as persistQuestionTags,
   migrateGuestDataToCloud,
   deriveStats,
 } from "../services/storageService";
 import { supabase, isCloudEnabled } from "../services/supabase";
 import { QUESTIONS, getQuestions } from "../data/questions";
+import {
+  slugify,
+  effectiveTagsFor,
+  tagLabel,
+  getBuiltInTagSlugs,
+  BUILT_IN_TAG_LABELS,
+} from "../data/tags";
 import { getYourTurnCount, subscribeToRounds } from "../services/gameService";
 
 const AppContext = createContext(null);
@@ -47,9 +58,12 @@ export function AppProvider({ children }) {
 
   const [favorites, setFavorites] = useState(new Set());
   const [answers, setAnswers] = useState({});
+  const [customTags, setCustomTags] = useState({});
+  const [tagOverrides, setTagOverrides] = useState({});
   const [ready, setReady] = useState(false);
 
   const [activeCategory, setActiveCategory] = useState(null);
+  const [activeTag, setActiveTag] = useState(null);
   const [deck, setDeck] = useState(() => getQuestions({ questions: QUESTIONS }));
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -90,10 +104,17 @@ export function AppProvider({ children }) {
       }
       prevUserIdRef.current = userId;
 
-      const [favs, ans] = await Promise.all([getFavorites(userId), getAnswers(userId)]);
+      const [favs, ans, ct, overrides] = await Promise.all([
+        getFavorites(userId),
+        getAnswers(userId),
+        getCustomTags(userId),
+        getQuestionTagOverrides(userId),
+      ]);
       if (cancelled) return;
       setFavorites(favs);
       setAnswers(ans);
+      setCustomTags(ct);
+      setTagOverrides(overrides);
       setReady(true);
     }
     refresh();
@@ -144,27 +165,38 @@ export function AppProvider({ children }) {
 
   // ── Rebuild deck whenever the pool or filter changes ────────────────────────
   useEffect(() => {
-    setDeck(getQuestions({ questions: allQuestions, category: activeCategory }));
+    setDeck(
+      getQuestions({ questions: allQuestions, category: activeCategory, tag: activeTag, tagOverrides })
+    );
     setCurrentIndex(0);
-  }, [allQuestions, activeCategory]);
+  }, [allQuestions, activeCategory, activeTag, tagOverrides]);
 
   // ── Filter ──────────────────────────────────────────────────────────────────
   const selectCategory = useCallback((category) => {
     setActiveCategory(category);
+    setActiveTag(null);
+  }, []);
+
+  const selectTag = useCallback((tag) => {
+    setActiveTag(tag);
+    setActiveCategory(null);
   }, []);
 
   const clearFilter = useCallback(() => {
     setActiveCategory(null);
+    setActiveTag(null);
   }, []);
 
   // ── Deck navigation ─────────────────────────────────────────────────────────
   const nextQuestion = useCallback(() => {
     setCurrentIndex((i) => {
       if (i < deck.length - 1) return i + 1;
-      setDeck(getQuestions({ questions: allQuestions, category: activeCategory }));
+      setDeck(
+        getQuestions({ questions: allQuestions, category: activeCategory, tag: activeTag, tagOverrides })
+      );
       return 0;
     });
-  }, [deck.length, allQuestions, activeCategory]);
+  }, [deck.length, allQuestions, activeCategory, activeTag, tagOverrides]);
 
   const prevQuestion = useCallback(() => {
     setCurrentIndex((i) => Math.max(0, i - 1));
@@ -206,6 +238,60 @@ export function AppProvider({ children }) {
   );
 
   const getAnswer = useCallback((questionId) => answers[questionId] || null, [answers]);
+
+  // ── Tags ─────────────────────────────────────────────────────────────────────
+  const allTags = useMemo(() => {
+    const builtInSlugs = getBuiltInTagSlugs(allQuestions);
+    const customSlugs = Object.keys(customTags);
+    const seen = new Set([...builtInSlugs, ...customSlugs, ...Object.keys(BUILT_IN_TAG_LABELS)]);
+
+    const counts = {};
+    for (const q of allQuestions) {
+      const tags = effectiveTagsFor(q, tagOverrides);
+      for (const t of tags) {
+        counts[t] = (counts[t] || 0) + 1;
+        seen.add(t);
+      }
+    }
+
+    return Array.from(seen)
+      .map((slug) => ({
+        slug,
+        label: tagLabel(slug, customTags),
+        count: counts[slug] || 0,
+        isCustom: !BUILT_IN_TAG_LABELS[slug] && !builtInSlugs.has(slug),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [customTags, tagOverrides, allQuestions]);
+
+  const getTagsForQuestion = useCallback(
+    (question) => effectiveTagsFor(question, tagOverrides),
+    [tagOverrides]
+  );
+
+  const setTagsForQuestion = useCallback(
+    async (questionId, tagSlugs) => {
+      await persistQuestionTags(userId, questionId, tagSlugs);
+      setTagOverrides(await getQuestionTagOverrides(userId));
+    },
+    [userId]
+  );
+
+  const createTag = useCallback(
+    async (label) => {
+      const trimmed = String(label).trim();
+      if (!trimmed) return null;
+      const slug = slugify(trimmed);
+      if (!slug) return null;
+      const builtIn = getBuiltInTagSlugs(allQuestions);
+      if (!BUILT_IN_TAG_LABELS[slug] && !builtIn.has(slug)) {
+        await saveCustomTag(userId, slug, trimmed);
+        setCustomTags(await getCustomTags(userId));
+      }
+      return slug;
+    },
+    [userId, allQuestions]
+  );
 
   // ── Stats ──────────────────────────────────────────────────────────────────
   const stats = useMemo(
@@ -257,8 +343,15 @@ export function AppProvider({ children }) {
       refreshGames,
       allQuestions,
       activeCategory,
+      activeTag,
       selectCategory,
+      selectTag,
       clearFilter,
+      allTags,
+      customTags,
+      getTagsForQuestion,
+      setTagsForQuestion,
+      createTag,
       deck,
       currentIndex,
       currentQuestion,
@@ -286,8 +379,15 @@ export function AppProvider({ children }) {
       refreshGames,
       allQuestions,
       activeCategory,
+      activeTag,
       selectCategory,
+      selectTag,
       clearFilter,
+      allTags,
+      customTags,
+      getTagsForQuestion,
+      setTagsForQuestion,
+      createTag,
       deck,
       currentIndex,
       currentQuestion,
