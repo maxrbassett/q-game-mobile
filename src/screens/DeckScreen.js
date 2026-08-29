@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start",
     paddingHorizontal: 20,
-    paddingTop: 8,
+    paddingTop: 22,
     paddingBottom: 4,
   },
   title: {
