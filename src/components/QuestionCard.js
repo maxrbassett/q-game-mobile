@@ -5,18 +5,31 @@
  * a separate collapsible "answer / additional thoughts" section, and
  * full-width Prev/Next buttons.
  *
- * Swipe left/right (or the nav buttons) move through the deck. Uses
- * react-native-gesture-handler's Pan gesture rather than core PanResponder —
- * the card lives inside a ScrollView (the answer section below it needs to
- * scroll), and PanResponder's JS-thread-only gesture arbitration doesn't
- * negotiate cleanly with an enclosing ScrollView (symptom: the swipe
- * randomly "gets stuck"). Gesture Handler's native recognizer resolves that
- * correctly via activeOffsetX/failOffsetY below.
+ * Swipe left/right (or the nav buttons) move through the deck.
+ *
+ * The gesture/animation stack here is deliberate. The card sits inside a
+ * ScrollView (the answer section below it has to scroll), so the swipe uses
+ * Gesture Handler's native recognizer — core PanResponder arbitrates on the
+ * JS thread and fights the enclosing ScrollView for the touch. The drag
+ * itself is driven by Reanimated shared values on the UI thread rather than
+ * core Animated: mixing `Animated.timing({useNativeDriver: true})` with
+ * per-frame `setValue()` calls leaves the native node holding the last
+ * animated value, which stranded the card off-screen (it looked like cards
+ * were vanishing). Shared values keep drag, fling, and reset in one system.
  */
 
-import React, { useState, useEffect, useRef } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, Animated, Dimensions } from "react-native";
+import React, { useState, useEffect, useCallback } from "react";
+import { View, Text, TextInput, Pressable, StyleSheet, Dimensions } from "react-native";
 import { ScrollView, Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  interpolate,
+  Extrapolation,
+  runOnJS,
+} from "react-native-reanimated";
 import { useApp } from "../context/AppContext";
 import { getChoices } from "../data/choices";
 import { tagLabel } from "../data/tags";
@@ -46,7 +59,7 @@ export default function QuestionCard({ colors, navigation }) {
     user,
   } = useApp();
 
-  const position = useRef(new Animated.ValueXY()).current;
+  const translateX = useSharedValue(0);
   const [answerOpen, setAnswerOpen] = useState(true);
   const [answerText, setAnswerText] = useState("");
   const [selectedChoice, setSelectedChoice] = useState(null);
@@ -66,33 +79,68 @@ export default function QuestionCard({ colors, navigation }) {
     setAnswerOpen(true);
   }, [currentQuestion?.id]);
 
-  const animateOffThenAdvance = (direction, advance) => {
-    haptics.light();
-    Animated.timing(position, {
-      toValue: { x: direction * SCREEN_WIDTH * 1.2, y: 0 },
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
-      position.setValue({ x: 0, y: 0 });
-      advance();
-    });
-  };
+  /**
+   * Runs on the JS thread once the fly-out finishes: swap the question and
+   * snap the card back to centre in the same tick, so the incoming card is
+   * never painted at the old off-screen offset. Doing the reset here (rather
+   * than keying it off a question-id change) also covers the case where the
+   * index doesn't actually move — swiping right at index 0 — which would
+   * otherwise leave the card stranded off-screen.
+   */
+  const commitAdvance = useCallback(
+    (goNext) => {
+      haptics.light();
+      if (goNext) nextQuestion();
+      else prevQuestion();
+      translateX.value = 0;
+    },
+    [nextQuestion, prevQuestion, translateX]
+  );
+
+  const flyOut = useCallback(
+    (goNext) => {
+      translateX.value = withTiming(
+        (goNext ? -1 : 1) * SCREEN_WIDTH * 1.2,
+        { duration: 180 },
+        (finished) => {
+          if (finished) runOnJS(commitAdvance)(goNext);
+        }
+      );
+    },
+    [commitAdvance, translateX]
+  );
 
   const panGesture = Gesture.Pan()
     .activeOffsetX([-10, 10])
     .failOffsetY([-15, 15])
     .onUpdate((e) => {
-      position.setValue({ x: e.translationX, y: 0 });
+      translateX.value = e.translationX;
     })
     .onEnd((e) => {
       if (e.translationX < -SWIPE_THRESHOLD) {
-        animateOffThenAdvance(-1, nextQuestion);
+        translateX.value = withTiming(-SCREEN_WIDTH * 1.2, { duration: 180 }, (finished) => {
+          if (finished) runOnJS(commitAdvance)(true);
+        });
       } else if (e.translationX > SWIPE_THRESHOLD) {
-        animateOffThenAdvance(1, prevQuestion);
+        translateX.value = withTiming(SCREEN_WIDTH * 1.2, { duration: 180 }, (finished) => {
+          if (finished) runOnJS(commitAdvance)(false);
+        });
       } else {
-        Animated.spring(position, { toValue: { x: 0, y: 0 }, useNativeDriver: true }).start();
+        translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
       }
     });
+
+  const cardAnimatedStyle = useAnimatedStyle(() => {
+    const deg = interpolate(
+      translateX.value,
+      [-SCREEN_WIDTH, 0, SCREEN_WIDTH],
+      [-8, 0, 8],
+      Extrapolation.CLAMP
+    );
+    return {
+      transform: [{ translateX: translateX.value }, { rotate: `${deg}deg` }],
+    };
+  });
 
   if (!currentQuestion) {
     return (
@@ -101,11 +149,6 @@ export default function QuestionCard({ colors, navigation }) {
       </View>
     );
   }
-
-  const rotate = position.x.interpolate({
-    inputRange: [-SCREEN_WIDTH, 0, SCREEN_WIDTH],
-    outputRange: ["-8deg", "0deg", "8deg"],
-  });
 
   const accent = CATEGORY_COLORS[currentQuestion.category] ?? colors.accent;
   const displayText = choices?.displayText ?? currentQuestion.text;
@@ -174,8 +217,8 @@ export default function QuestionCard({ colors, navigation }) {
               backgroundColor: colors.surface,
               borderColor: colors.border,
               borderTopColor: accent,
-              transform: [{ translateX: position.x }, { rotate }],
             },
+            cardAnimatedStyle,
           ]}
         >
           <Text style={[styles.categoryText, { color: accent, fontFamily: fonts.bodyMedium }]}>
@@ -284,14 +327,14 @@ export default function QuestionCard({ colors, navigation }) {
 
       <View style={styles.navRow}>
         <Pressable
-          onPress={() => currentIndex > 0 && animateOffThenAdvance(1, prevQuestion)}
+          onPress={() => currentIndex > 0 && flyOut(false)}
           disabled={currentIndex === 0}
           style={[styles.navButton, { borderColor: colors.border, backgroundColor: colors.surface, opacity: currentIndex === 0 ? 0.35 : 1 }]}
         >
           <Text style={{ color: colors.inkMuted, fontFamily: fonts.bodyMedium }}>‹ Prev</Text>
         </Pressable>
         <Pressable
-          onPress={() => animateOffThenAdvance(-1, nextQuestion)}
+          onPress={() => flyOut(true)}
           style={[styles.navButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
         >
           <Text style={{ color: colors.inkMuted, fontFamily: fonts.bodyMedium }}>Next ›</Text>
